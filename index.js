@@ -1,16 +1,44 @@
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 const app = express();
 app.use(express.json());
 
 const SHOP = process.env.SHOP_DOMAIN;
 const TOKEN = process.env.SHOPIFY_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID || 'c71f0a73eb33baccae7555709567abf6';
+const CLIENT_SECRET = process.env.CLIENT_SECRET || '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';
+const HOST = process.env.RAILWAY_PUBLIC_DOMAIN || 'kutch-shopify-production.up.railway.app';
 
 const shopify = axios.create({
   baseURL: `https://${SHOP}/admin/api/2024-01`,
   headers: {
     'X-Shopify-Access-Token': TOKEN,
     'Content-Type': 'application/json'
+  }
+});
+
+// OAuth install
+app.get('/install', (req, res) => {
+  const scopes = 'read_products,write_products,read_content,write_content,read_themes,write_themes';
+  const redirectUri = `https://${HOST}/callback`;
+  const installUrl = `https://${SHOP}/admin/oauth/authorize?client_id=${CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  res.redirect(installUrl);
+});
+
+// OAuth callback
+app.get('/callback', async (req, res) => {
+  const { code } = req.query;
+  try {
+    const response = await axios.post(`https://${SHOP}/admin/oauth/access_token`, {
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      code
+    });
+    const accessToken = response.data.access_token;
+    res.send(`<h1>TOKEN OBTENIDO</h1><p>Copia este token y ponlo en Railway como SHOPIFY_TOKEN:</p><h2>${accessToken}</h2>`);
+  } catch (e) {
+    res.status(500).send('Error: ' + e.message);
   }
 });
 
@@ -24,7 +52,7 @@ app.get('/products', async (req, res) => {
   }
 });
 
-// UPDATE descripción de producto
+// UPDATE producto
 app.put('/products/:id', async (req, res) => {
   try {
     const r = await shopify.put(`/products/${req.params.id}.json`, { product: req.body });
@@ -44,7 +72,7 @@ app.get('/pages', async (req, res) => {
   }
 });
 
-// CREATE o UPDATE página
+// CREATE página
 app.post('/pages', async (req, res) => {
   try {
     const r = await shopify.post('/pages.json', { page: req.body });
@@ -54,19 +82,10 @@ app.post('/pages', async (req, res) => {
   }
 });
 
+// UPDATE página
 app.put('/pages/:id', async (req, res) => {
   try {
     const r = await shopify.put(`/pages/${req.params.id}.json`, { page: req.body });
-    res.json(r.data);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// UPDATE menú navegación
-app.get('/menus', async (req, res) => {
-  try {
-    const r = await shopify.get('/custom_collections.json');
     res.json(r.data);
   } catch (e) {
     res.status(500).json({ error: e.message });

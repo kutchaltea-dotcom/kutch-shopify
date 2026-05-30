@@ -41,8 +41,10 @@ const shopify = async (method, path, data) => {
   }
 };
 
+// SALUD
 app.get('/health', (req, res) => res.json({ status: 'ok', shop: SHOP }));
 
+// PRODUCTOS
 app.get('/products', async (req, res) => {
   try { res.json(await shopify('get', '/products.json?limit=250')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -53,6 +55,7 @@ app.put('/products/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
+// PÁGINAS
 app.get('/pages', async (req, res) => {
   try { res.json(await shopify('get', '/pages.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -68,20 +71,86 @@ app.put('/pages/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-app.get('/publish-historia', async (req, res) => {
+app.delete('/pages/:id', async (req, res) => {
+  try { res.json(await shopify('delete', `/pages/${req.params.id}.json`)); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// TEMAS
+app.get('/themes', async (req, res) => {
+  try { res.json(await shopify('get', '/themes.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.get('/themes/:id/assets', async (req, res) => {
+  try { res.json(await shopify('get', `/themes/${req.params.id}/assets.json`)); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.put('/themes/:id/assets', async (req, res) => {
+  try { res.json(await shopify('put', `/themes/${req.params.id}/assets.json`, { asset: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// MENÚS
+app.get('/menus', async (req, res) => {
+  try { res.json(await shopify('get', '/custom_collections.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.get('/navigations', async (req, res) => {
+  try { res.json(await shopify('get', '/menus.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// BLOG Y ARTÍCULOS
+app.get('/blogs', async (req, res) => {
+  try { res.json(await shopify('get', '/blogs.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.get('/blogs/:id/articles', async (req, res) => {
+  try { res.json(await shopify('get', `/blogs/${req.params.id}/articles.json`)); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.post('/blogs/:id/articles', async (req, res) => {
+  try { res.json(await shopify('post', `/blogs/${req.params.id}/articles.json`, { article: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.put('/blogs/:blog_id/articles/:id', async (req, res) => {
+  try { res.json(await shopify('put', `/blogs/${req.params.blog_id}/articles/${req.params.id}.json`, { article: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// COLECCIONES
+app.get('/collections', async (req, res) => {
   try {
-    const data = await shopify('post', '/pages.json', {
-      page: {
-        title: "Nuestra Historia",
-        handle: "nuestra-historia",
-        published: true,
-        body_html: "<p>El viaje se convirtió en un oficio. El oficio, en una forma de entender la vida.</p><p>Rajasthan y Gujarat — y en particular la región de Kutch — son algunos de los territorios más singulares del planeta. Kutch conforma un inmenso desierto de sal y una sabana en el extremo occidental de India. Durante siglos, comunidades nómadas como los Rabari, los Ahir o los Mutwa se han desplazado por ese territorio llevando consigo sus técnicas de bordado como símbolo de pertenencia y moneda. Cada puntada es memoria e identidad. Geometrías que cuentan historias. Arte textil. Eso es lo que hace de Kutch un lugar único en el mundo, y lo que me arrastra hasta allí cada año.</p><p>Trabajamos con talleres familiares, fibras naturales y materiales up-cycled, preservando procesos tradicionales. Cada pieza forma parte de una colección limitada elaborada con criterio ético en un marco de comercio responsable.</p><p>Piezas con origen, adaptadas a los códigos mediterráneos con un pulso étnico y mestizo.</p><p>Mantener esa cultura viva es parte de lo que somos.</p>"
-      }
-    });
-    res.json({ ok: true, id: data.page.id, title: data.page.title });
-  } catch (e) {
-    res.status(500).json({ error: e.message, details: e.response?.data });
+    const [custom, smart] = await Promise.all([
+      shopify('get', '/custom_collections.json'),
+      shopify('get', '/smart_collections.json')
+    ]);
+    res.json({ custom_collections: custom.custom_collections, smart_collections: smart.smart_collections });
   }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// METADATOS DE TIENDA
+app.get('/shop', async (req, res) => {
+  try { res.json(await shopify('get', '/shop.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+// REDIRECTS
+app.get('/redirects', async (req, res) => {
+  try { res.json(await shopify('get', '/redirects.json')); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.post('/redirects', async (req, res) => {
+  try { res.json(await shopify('post', '/redirects.json', { redirect: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
 const PORT = process.env.PORT || 3000;

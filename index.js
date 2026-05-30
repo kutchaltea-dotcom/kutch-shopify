@@ -17,21 +17,12 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET || 'shpss_5c71ad132701e0710cfb0b
 let ACCESS_TOKEN = process.env.SHOPIFY_TOKEN;
 
 const shopify = async (method, path, data) => {
-  const r = await axios({
-    method,
-    url: `https://${SHOP}/admin/api/2025-01${path}`,
-    data,
-    headers: { 'X-Shopify-Access-Token': ACCESS_TOKEN, 'Content-Type': 'application/json' }
-  });
+  const r = await axios({ method, url: `https://${SHOP}/admin/api/2025-01${path}`, data, headers: { 'X-Shopify-Access-Token': ACCESS_TOKEN, 'Content-Type': 'application/json' } });
   return r.data;
 };
 
 const gql = async (query, variables = {}) => {
-  const r = await axios.post(
-    `https://${SHOP}/admin/api/2025-01/graphql.json`,
-    { query, variables },
-    { headers: { 'X-Shopify-Access-Token': ACCESS_TOKEN, 'Content-Type': 'application/json' } }
-  );
+  const r = await axios.post(`https://${SHOP}/admin/api/2025-01/graphql.json`, { query, variables }, { headers: { 'X-Shopify-Access-Token': ACCESS_TOKEN, 'Content-Type': 'application/json' } });
   return r.data;
 };
 
@@ -39,30 +30,17 @@ app.get('/callback', async (req, res) => {
   try {
     const { code } = req.query;
     if (!code) return res.send('No code received');
-    const r = await axios.post(`https://${SHOP}/admin/oauth/access_token`, {
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      code
-    });
+    const r = await axios.post(`https://${SHOP}/admin/oauth/access_token`, { client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code });
     ACCESS_TOKEN = r.data.access_token;
-    res.send(`<html><body style="font-family:sans-serif;padding:40px;background:#f5f0eb">
-      <h1 style="letter-spacing:4px">KUTCH ✅</h1>
-      <p>Token obtenido correctamente.</p>
-      <p><strong>Copia este token y ponlo en Railway como SHOPIFY_TOKEN:</strong></p>
-      <p style="background:white;padding:12px;border-radius:8px;word-break:break-all;font-family:monospace">${ACCESS_TOKEN}</p>
-      <a href="/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1a1a1a;color:white;text-decoration:none;border-radius:8px">Ir al panel →</a>
-      </body></html>`);
-  } catch(e) {
-    res.status(500).send('Error: ' + e.message + ' / ' + JSON.stringify(e.response?.data));
-  }
+    res.send(`<html><body style="font-family:sans-serif;padding:40px;background:#f5f0eb"><h1 style="letter-spacing:4px">KUTCH ✅</h1><p>Token obtenido.</p><p><strong>Pon este valor en Railway como SHOPIFY_TOKEN:</strong></p><p style="background:white;padding:12px;border-radius:8px;word-break:break-all;font-family:monospace">${ACCESS_TOKEN}</p><a href="/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1a1a1a;color:white;text-decoration:none;border-radius:8px">Ir al panel →</a></body></html>`);
+  } catch(e) { res.status(500).send('Error: ' + e.message); }
 });
 
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KUTCH — Panel de Control</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -85,8 +63,8 @@ app.get('/', (req, res) => {
 <div class="grid">
   <div class="card">
     <h2>🧭 Navegación</h2>
-    <button onclick="run(this, '/do/get-menus')">🔍 Ver menús actuales</button>
-    <button onclick="run(this, '/do/add-menu-nuestra-historia')">➕ Añadir "Nuestra Historia" al menú</button>
+    <button onclick="run(this, '/do/add-nuestra-historia-todos-menus')">➕ Añadir "Nuestra Historia" a todos los menús</button>
+    <button onclick="run(this, '/do/get-menus')">🔍 Ver todos los menús</button>
     <button onclick="run(this, '/do/fix-english-texts')">🇪🇸 Corregir textos en inglés</button>
     <div class="result"></div>
   </div>
@@ -103,79 +81,70 @@ app.get('/', (req, res) => {
   <div class="card">
     <h2>🔧 Sistema</h2>
     <button onclick="run(this, '/health')">✅ Test conexión Shopify</button>
-    <button onclick="run(this, '/do/list-locale-files')">🔍 Ver archivos de idioma</button>
     <div class="result"></div>
   </div>
 </div>
 <script>
 async function run(btn, url) {
   const result = btn.parentElement.querySelector('.result');
-  result.style.display = 'block';
-  result.className = 'result';
+  result.style.display = 'block'; result.className = 'result';
   result.textContent = 'Ejecutando...';
   try {
     const r = await fetch(url);
     const data = await r.json();
     result.className = 'result ok';
     result.textContent = JSON.stringify(data, null, 2);
-  } catch(e) {
-    result.className = 'result err';
-    result.textContent = 'Error: ' + e.message;
-  }
+  } catch(e) { result.className = 'result err'; result.textContent = 'Error: ' + e.message; }
 }
 </script>
 </body>
 </html>`);
 });
 
-app.get('/do/list-locale-files', async (req, res) => {
+// Añadir a TODOS los menús
+app.get('/do/add-nuestra-historia-todos-menus', async (req, res) => {
   try {
-    const themeId = '162207236386';
-    const data = await shopify('get', `/themes/${themeId}/assets.json`);
-    const locales = data.assets.filter(a => a.key.includes('locale') || a.key.includes('es.'));
-    res.json(locales.map(a => a.key));
+    const data = await gql(`{ menus(first: 20) { edges { node { id handle title items { id title url type } } } } }`);
+    const menus = data.data?.menus?.edges || [];
+    const results = [];
+
+    for (const edge of menus) {
+      const menu = edge.node;
+      const exists = menu.items.some(i => i.url && i.url.includes('nuestra-historia'));
+      if (exists) { results.push({ menu: menu.handle, status: 'ya existe ✅' }); continue; }
+
+      const itemsInput = menu.items.map(i => ({ id: i.id, title: i.title, url: i.url, type: i.type || 'HTTP' }));
+      itemsInput.push({ title: 'Nuestra Historia', url: 'https://kutch.es/pages/nuestra-historia', type: 'HTTP' });
+
+      const r = await gql(`mutation menuUpdate($id: ID!, $items: [MenuItemUpdateInput!]!) {
+        menuUpdate(id: $id, items: $items) {
+          menu { id title items { title url } }
+          userErrors { field message }
+        }
+      }`, { id: menu.id, items: itemsInput });
+
+      const errors = r.data?.menuUpdate?.userErrors;
+      results.push({ menu: menu.handle, status: errors?.length ? 'error: ' + errors[0].message : 'añadido ✅' });
+    }
+    res.json({ ok: true, results });
   } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
 app.get('/do/get-menus', async (req, res) => {
   try {
-    const data = await gql(`{ menus(first: 10) { edges { node { id handle title items { id title url } } } } }`);
+    const data = await gql(`{ menus(first: 20) { edges { node { id handle title items { title url } } } } }`);
     res.json(data);
-  } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
-});
-
-app.get('/do/add-menu-nuestra-historia', async (req, res) => {
-  try {
-    const data = await gql(`{ menus(first: 10) { edges { node { id handle title items { id title url type } } } } }`);
-    const menus = data.data?.menus?.edges || [];
-    const mainMenu = menus.find(e => e.node.handle === 'main-menu') || menus[0];
-    if (!mainMenu) return res.json({ ok: false, msg: 'No se encontró ningún menú' });
-    const menu = mainMenu.node;
-    const exists = menu.items.some(i => i.url && i.url.includes('nuestra-historia'));
-    if (exists) return res.json({ ok: true, msg: 'Ya existe en el menú ✅' });
-    const itemsInput = menu.items.map(i => ({ id: i.id, title: i.title, url: i.url, type: i.type || 'HTTP' }));
-    itemsInput.push({ title: 'Nuestra Historia', url: 'https://kutch.es/pages/nuestra-historia', type: 'HTTP' });
-    const result = await gql(`mutation menuUpdate($id: ID!, $items: [MenuItemUpdateInput!]!) {
-      menuUpdate(id: $id, items: $items) {
-        menu { id title items { title url } }
-        userErrors { field message }
-      }
-    }`, { id: menu.id, items: itemsInput });
-    res.json({ ok: true, result });
-  } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/do/fix-english-texts', async (req, res) => {
   try {
     const themeId = '162207236386';
-    // Buscar el archivo de locales correcto
     const assetsData = await shopify('get', `/themes/${themeId}/assets.json`);
-    const localeFile = assetsData.assets.find(a => a.key.includes('es.default') || a.key.includes('es.json'));
-    if (!localeFile) return res.json({ ok: false, msg: 'No se encontró archivo de locales en español', assets: assetsData.assets.filter(a=>a.key.includes('locale')).map(a=>a.key) });
-    
+    const localeFile = assetsData.assets.find(a => a.key === 'locales/es.json') || assetsData.assets.find(a => a.key.includes('es.default'));
+    if (!localeFile) return res.json({ ok: false, msg: 'No se encontró archivo de locales' });
     const locales = await shopify('get', `/themes/${themeId}/assets.json?asset[key]=${localeFile.key}`);
     let content = JSON.parse(locales.asset.value);
-    
     if (!content.layout) content.layout = {};
     content.layout.cart = content.layout.cart || {};
     content.layout.cart.title = 'Carrito';
@@ -186,12 +155,9 @@ app.get('/do/fix-english-texts', async (req, res) => {
     if (!content.general) content.general = {};
     content.general.wishlist = content.general.wishlist || {};
     content.general.wishlist.title = 'Lista de deseos';
-
-    await shopify('put', `/themes/${themeId}/assets.json`, {
-      asset: { key: localeFile.key, value: JSON.stringify(content, null, 2) }
-    });
+    await shopify('put', `/themes/${themeId}/assets.json`, { asset: { key: localeFile.key, value: JSON.stringify(content, null, 2) } });
     res.json({ ok: true, msg: `Textos corregidos en ${localeFile.key} ✅` });
-  } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/do/check-pages', async (req, res) => {
@@ -267,13 +233,9 @@ app.post('/blogs/:id/articles', async (req, res) => {
 
 app.get('/collections', async (req, res) => {
   try {
-    const [custom, smart] = await Promise.all([
-      shopify('get', '/custom_collections.json'),
-      shopify('get', '/smart_collections.json')
-    ]);
+    const [custom, smart] = await Promise.all([shopify('get', '/custom_collections.json'), shopify('get', '/smart_collections.json')]);
     res.json({ custom_collections: custom.custom_collections, smart_collections: smart.smart_collections });
-  }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 3000;

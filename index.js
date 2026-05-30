@@ -68,5 +68,21 @@ app.put('/pages/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
+app.get('/publish-historia', async (req, res) => {
+  try {
+    const data = await shopify('post', '/pages.json', {
+      page: {
+        title: "Nuestra Historia",
+        handle: "nuestra-historia",
+        published: true,
+        body_html: "<p>El viaje se convirtió en un oficio. El oficio, en una forma de entender la vida.</p><p>Rajasthan y Gujarat — y en particular la región de Kutch — son algunos de los territorios más singulares del planeta. Kutch conforma un inmenso desierto de sal y una sabana en el extremo occidental de India. Durante siglos, comunidades nómadas como los Rabari, los Ahir o los Mutwa se han desplazado por ese territorio llevando consigo sus técnicas de bordado como símbolo de pertenencia y moneda. Cada puntada es memoria e identidad. Geometrías que cuentan historias. Arte textil. Eso es lo que hace de Kutch un lugar único en el mundo, y lo que me arrastra hasta allí cada año.</p><p>Trabajamos con talleres familiares, fibras naturales y materiales up-cycled, preservando procesos tradicionales. Cada pieza forma parte de una colección limitada elaborada con criterio ético en un marco de comercio responsable.</p><p>Piezas con origen, adaptadas a los códigos mediterráneos con un pulso étnico y mestizo.</p><p>Mantener esa cultura viva es parte de lo que somos.</p>"
+      }
+    });
+    res.json({ ok: true, id: data.page.id, title: data.page.title });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Kutch API running on port ${PORT}`));

@@ -41,10 +41,8 @@ const shopify = async (method, path, data) => {
   }
 };
 
-// SALUD
 app.get('/health', (req, res) => res.json({ status: 'ok', shop: SHOP }));
 
-// PRODUCTOS
 app.get('/products', async (req, res) => {
   try { res.json(await shopify('get', '/products.json?limit=250')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -55,7 +53,6 @@ app.put('/products/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// PÁGINAS
 app.get('/pages', async (req, res) => {
   try { res.json(await shopify('get', '/pages.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -76,7 +73,6 @@ app.delete('/pages/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// TEMAS
 app.get('/themes', async (req, res) => {
   try { res.json(await shopify('get', '/themes.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -92,18 +88,6 @@ app.put('/themes/:id/assets', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// MENÚS
-app.get('/menus', async (req, res) => {
-  try { res.json(await shopify('get', '/custom_collections.json')); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
-});
-
-app.get('/navigations', async (req, res) => {
-  try { res.json(await shopify('get', '/menus.json')); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
-});
-
-// BLOG Y ARTÍCULOS
 app.get('/blogs', async (req, res) => {
   try { res.json(await shopify('get', '/blogs.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -124,7 +108,6 @@ app.put('/blogs/:blog_id/articles/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// COLECCIONES
 app.get('/collections', async (req, res) => {
   try {
     const [custom, smart] = await Promise.all([
@@ -136,13 +119,11 @@ app.get('/collections', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// METADATOS DE TIENDA
 app.get('/shop', async (req, res) => {
   try { res.json(await shopify('get', '/shop.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
-// REDIRECTS
 app.get('/redirects', async (req, res) => {
   try { res.json(await shopify('get', '/redirects.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
@@ -150,6 +131,32 @@ app.get('/redirects', async (req, res) => {
 
 app.post('/redirects', async (req, res) => {
   try { res.json(await shopify('post', '/redirects.json', { redirect: req.body })); }
+  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
+app.get('/fix-page-template', async (req, res) => {
+  try {
+    const data = await shopify('put', '/themes/162207236386/assets.json', {
+      asset: {
+        key: 'templates/page.nuestra-historia.json',
+        value: JSON.stringify({
+          layout: 'theme',
+          sections: { main: { type: 'main-page', settings: {} } },
+          order: ['main']
+        })
+      }
+    });
+    const page = await shopify('put', '/pages/689607016824.json', {
+      page: { id: 689607016824, template_suffix: 'nuestra-historia' }
+    });
+    res.json({ ok: true, asset: data.asset.key, template: page.page.template_suffix });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
+app.get('/navigations', async (req, res) => {
+  try { res.json(await shopify('get', '/menus.json')); }
   catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 

@@ -35,34 +35,28 @@ const gql = async (query, variables = {}) => {
   return r.data;
 };
 
-// OAUTH CALLBACK - captura el token automáticamente
 app.get('/callback', async (req, res) => {
   try {
     const { code } = req.query;
     if (!code) return res.send('No code received');
-    
     const r = await axios.post(`https://${SHOP}/admin/oauth/access_token`, {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       code
     });
-    
     ACCESS_TOKEN = r.data.access_token;
-    res.send(`
-      <html><body style="font-family:sans-serif;padding:40px;background:#f5f0eb">
+    res.send(`<html><body style="font-family:sans-serif;padding:40px;background:#f5f0eb">
       <h1 style="letter-spacing:4px">KUTCH ✅</h1>
       <p>Token obtenido correctamente.</p>
       <p><strong>Copia este token y ponlo en Railway como SHOPIFY_TOKEN:</strong></p>
       <p style="background:white;padding:12px;border-radius:8px;word-break:break-all;font-family:monospace">${ACCESS_TOKEN}</p>
       <a href="/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#1a1a1a;color:white;text-decoration:none;border-radius:8px">Ir al panel →</a>
-      </body></html>
-    `);
+      </body></html>`);
   } catch(e) {
     res.status(500).send('Error: ' + e.message + ' / ' + JSON.stringify(e.response?.data));
   }
 });
 
-// PANEL DE CONTROL
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="es">
@@ -109,6 +103,7 @@ app.get('/', (req, res) => {
   <div class="card">
     <h2>🔧 Sistema</h2>
     <button onclick="run(this, '/health')">✅ Test conexión Shopify</button>
+    <button onclick="run(this, '/do/list-locale-files')">🔍 Ver archivos de idioma</button>
     <div class="result"></div>
   </div>
 </div>
@@ -133,35 +128,33 @@ async function run(btn, url) {
 </html>`);
 });
 
+app.get('/do/list-locale-files', async (req, res) => {
+  try {
+    const themeId = '162207236386';
+    const data = await shopify('get', `/themes/${themeId}/assets.json`);
+    const locales = data.assets.filter(a => a.key.includes('locale') || a.key.includes('es.'));
+    res.json(locales.map(a => a.key));
+  } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+});
+
 app.get('/do/get-menus', async (req, res) => {
   try {
-    const data = await gql(`{
-      menus(first: 10) {
-        edges { node { id handle title items { id title url } } }
-      }
-    }`);
+    const data = await gql(`{ menus(first: 10) { edges { node { id handle title items { id title url } } } } }`);
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
 app.get('/do/add-menu-nuestra-historia', async (req, res) => {
   try {
-    const data = await gql(`{
-      menus(first: 10) {
-        edges { node { id handle title items { id title url type } } }
-      }
-    }`);
+    const data = await gql(`{ menus(first: 10) { edges { node { id handle title items { id title url type } } } } }`);
     const menus = data.data?.menus?.edges || [];
     const mainMenu = menus.find(e => e.node.handle === 'main-menu') || menus[0];
-    if (!mainMenu) return res.json({ ok: false, msg: 'No se encontró ningún menú', disponibles: menus.map(e => e.node.handle) });
-
+    if (!mainMenu) return res.json({ ok: false, msg: 'No se encontró ningún menú' });
     const menu = mainMenu.node;
     const exists = menu.items.some(i => i.url && i.url.includes('nuestra-historia'));
     if (exists) return res.json({ ok: true, msg: 'Ya existe en el menú ✅' });
-
     const itemsInput = menu.items.map(i => ({ id: i.id, title: i.title, url: i.url, type: i.type || 'HTTP' }));
     itemsInput.push({ title: 'Nuestra Historia', url: 'https://kutch.es/pages/nuestra-historia', type: 'HTTP' });
-
     const result = await gql(`mutation menuUpdate($id: ID!, $items: [MenuItemUpdateInput!]!) {
       menuUpdate(id: $id, items: $items) {
         menu { id title items { title url } }
@@ -175,8 +168,14 @@ app.get('/do/add-menu-nuestra-historia', async (req, res) => {
 app.get('/do/fix-english-texts', async (req, res) => {
   try {
     const themeId = '162207236386';
-    const locales = await shopify('get', `/themes/${themeId}/assets.json?asset[key]=locales/es.default.json`);
+    // Buscar el archivo de locales correcto
+    const assetsData = await shopify('get', `/themes/${themeId}/assets.json`);
+    const localeFile = assetsData.assets.find(a => a.key.includes('es.default') || a.key.includes('es.json'));
+    if (!localeFile) return res.json({ ok: false, msg: 'No se encontró archivo de locales en español', assets: assetsData.assets.filter(a=>a.key.includes('locale')).map(a=>a.key) });
+    
+    const locales = await shopify('get', `/themes/${themeId}/assets.json?asset[key]=${localeFile.key}`);
     let content = JSON.parse(locales.asset.value);
+    
     if (!content.layout) content.layout = {};
     content.layout.cart = content.layout.cart || {};
     content.layout.cart.title = 'Carrito';
@@ -184,10 +183,14 @@ app.get('/do/fix-english-texts', async (req, res) => {
     content.customer.login = content.customer.login || {};
     content.customer.login.title = 'Iniciar sesión';
     content.customer.wishlist = 'Lista de deseos';
+    if (!content.general) content.general = {};
+    content.general.wishlist = content.general.wishlist || {};
+    content.general.wishlist.title = 'Lista de deseos';
+
     await shopify('put', `/themes/${themeId}/assets.json`, {
-      asset: { key: 'locales/es.default.json', value: JSON.stringify(content, null, 2) }
+      asset: { key: localeFile.key, value: JSON.stringify(content, null, 2) }
     });
-    res.json({ ok: true, msg: 'Textos corregidos ✅' });
+    res.json({ ok: true, msg: `Textos corregidos en ${localeFile.key} ✅` });
   } catch(e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
 });
 
@@ -214,52 +217,52 @@ app.get('/health', async (req, res) => {
 
 app.get('/products', async (req, res) => {
   try { res.json(await shopify('get', '/products.json?limit=250')); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/products/:id', async (req, res) => {
   try { res.json(await shopify('put', `/products/${req.params.id}.json`, { product: req.body })); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/pages', async (req, res) => {
   try { res.json(await shopify('get', '/pages.json')); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/pages', async (req, res) => {
   try { res.json(await shopify('post', '/pages.json', { page: req.body })); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/pages/:id', async (req, res) => {
   try { res.json(await shopify('put', `/pages/${req.params.id}.json`, { page: req.body })); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/themes/:id/assets', async (req, res) => {
   try { res.json(await shopify('get', `/themes/${req.params.id}/assets.json`)); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/themes/:id/assets', async (req, res) => {
   try { res.json(await shopify('put', `/themes/${req.params.id}/assets.json`, { asset: req.body })); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/blogs', async (req, res) => {
   try { res.json(await shopify('get', '/blogs.json')); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/blogs/:id/articles', async (req, res) => {
   try { res.json(await shopify('get', `/blogs/${req.params.id}/articles.json`)); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/blogs/:id/articles', async (req, res) => {
   try { res.json(await shopify('post', `/blogs/${req.params.id}/articles.json`, { article: req.body })); }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/collections', async (req, res) => {
@@ -270,7 +273,7 @@ app.get('/collections', async (req, res) => {
     ]);
     res.json({ custom_collections: custom.custom_collections, smart_collections: smart.smart_collections });
   }
-  catch (e) { res.status(500).json({ error: e.message, details: e.response?.data }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 3000;

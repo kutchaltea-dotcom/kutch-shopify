@@ -152,6 +152,49 @@ app.get('/do/fix-compare-at', async (req, res) => {
   }
 });
 
+// ============ MODIFICAR AJUSTE DEL TEMA (con backup automático) ============
+// Uso: /do/settings-set?key=current.show_countdown&value=false&confirm=si
+app.get('/do/settings-set', async (req, res) => {
+  try {
+    const { key, value, confirm } = req.query;
+    if (!key || value === undefined) return res.json({ error: 'Faltan parámetros: key y value' });
+    if (confirm !== 'si') return res.json({ modo: 'SIMULACIÓN — añade &confirm=si para ejecutar', key, value });
+
+    const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=config/settings_data.json`);
+    const json = JSON.parse(a.asset.value);
+
+    // Backup antes de tocar nada
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: `assets/backup-settings-${Date.now()}.json`, value: a.asset.value }
+    });
+
+    // Convertir tipo del valor
+    let v = value;
+    if (value === 'true') v = true;
+    else if (value === 'false') v = false;
+    else if (value.trim() !== '' && !isNaN(value)) v = Number(value);
+
+    // Navegar la ruta con puntos
+    const parts = key.split('.');
+    let obj = json;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in obj)) return res.json({ error: 'Ruta no existe: ' + parts.slice(0, i + 1).join('.') });
+      obj = obj[parts[i]];
+    }
+    const last = parts[parts.length - 1];
+    if (!(last in obj)) return res.json({ error: 'Clave no existe: ' + key });
+    const antes = obj[last];
+    obj[last] = v;
+
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: 'config/settings_data.json', value: JSON.stringify(json) }
+    });
+    res.json({ ok: true, key, antes, ahora: v, backup: 'guardado en assets/' });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
 // ============ PANEL DE CONTROL ============
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -184,12 +227,14 @@ app.get('/', (req, res) => {
     <h2>📊 Auditoría</h2>
     <button onclick="run(this, '/do/audit')">🔍 Auditoría completa (catálogo + ventas)</button>
     <button onclick="run(this, '/do/locale-find?q=wish,login,search,cart,unit,hurry,subscrib,account,sold,viewing,share,sign')">🇬🇧 Buscar textos en inglés</button>
-    <button onclick="run(this, '/do/settings-find?q=countdown,visitor,viewing,example,congue,hurry,timer')">⚙️ Buscar ajustes problemáticos del tema</button>
+    <button onclick="run(this, '/do/settings-find?q=countdown,visitor,viewing,example,congue,hurry,timer,view,sold,flash,scarcity,people,real_time')">⚙️ Buscar ajustes problemáticos del tema</button>
     <div class="result"></div>
   </div>
 
   <div class="card">
     <h2>🧹 Limpieza</h2>
+    <button onclick="run(this, '/do/settings-set?key=current.show_countdown&value=false')">⏱️ Apagar countdown falso (simular)</button>
+    <button onclick="if(confirm('¿Apagar el countdown en toda la web?')) run(this, '/do/settings-set?key=current.show_countdown&value=false&confirm=si')">⏱️ Apagar countdown falso (EJECUTAR)</button>
     <button onclick="run(this, '/do/fix-compare-at')">👻 Descuentos fantasma (simular)</button>
     <button onclick="if(confirm('¿Ejecutar de verdad? Modifica precios comparados.')) run(this, '/do/fix-compare-at?confirm=si')">👻 Descuentos fantasma (EJECUTAR)</button>
     <div class="result"></div>

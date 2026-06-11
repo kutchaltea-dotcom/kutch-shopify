@@ -397,7 +397,100 @@ const TRADUCCIONES = {
   'Early access password...': 'Contraseña de acceso...',
   'Enter Password': 'Introduce la contraseña',
   'Blog': 'Blog',
-  'Email': 'Email'
+  'Email': 'Email',
+  // ===== Diccionario v3 =====
+  'Select Options': 'Elegir opciones',
+  'More sizes available': 'Más tallas disponibles',
+  'Measurements': 'Medidas',
+  'Add More': 'Añadir más',
+  'Quantity for {{ product }}': 'Cantidad de {{ product }}',
+  'Increase quantity for {{ product }}': 'Aumentar cantidad de {{ product }}',
+  'Decrease quantity for {{ product }}': 'Reducir cantidad de {{ product }}',
+  'View store information': 'Ver información de la tienda',
+  'Check availability at other stores': 'Ver disponibilidad en otras tiendas',
+  'Pickup available': 'Recogida disponible',
+  "Couldn't load pickup availability": 'No se pudo cargar la disponibilidad',
+  'Refresh': 'Actualizar',
+  'Regular price': 'Precio habitual',
+  'Sale price': 'Precio rebajado',
+  'Save {{ price }}': 'Ahorra {{ price }}',
+  'Read Less': 'Leer menos',
+  'Read More': 'Leer más',
+  'Share this product': 'Compartir este producto',
+  'This variant is sold out!': 'Esta variante está agotada',
+  'Custom Label': 'Etiqueta',
+  'Bundle': 'Pack',
+  'Unavailable': 'No disponible',
+  'This variant is unavailable!': 'Esta variante no está disponible',
+  '{{ option_value }} (Unavailable)': '{{ option_value }} (No disponible)',
+  '{{ title }} opens full screen video in same window.': '{{ title }} abre el vídeo a pantalla completa.',
+  'View in your space': 'Ver en tu espacio',
+  'View in your space, loads item in augmented reality window': 'Ver en tu espacio (realidad aumentada)',
+  'Pre-Order': 'Reserva',
+  'Quick View': 'Vista rápida',
+  'Quick view': 'Vista rápida',
+  'Quick Add': 'Añadir rápido',
+  'Select a {{ name }}': 'Elige {{ name }}',
+  'Shop Now': 'Comprar ahora',
+  'Add To Cart - {{ value }}': 'Añadir al carrito - {{ value }}',
+  'Hurry up! only {{ inventory }} left': 'Quedan {{ inventory }} unidades',
+  'Please hurry! Only {{ inventory }} left in stock': 'Quedan {{ inventory }} unidades',
+  'Maximum quantity: {{ inventory}}': 'Cantidad máxima: {{ inventory}}',
+  'In Stock': 'En stock',
+  'Many In Stock': 'En stock',
+  ' off': ' dto.',
+  'sold in last': 'vendidos en las últimas',
+  'hours': 'horas',
+  'Availability:': 'Disponibilidad:',
+  'Product Type:': 'Tipo de producto:',
+  'Show Variants': 'Ver variantes',
+  'Hide Variants': 'Ocultar variantes',
+  'Adding': 'Añadiendo',
+  'Thank You': 'Gracias',
+  'Added': 'Añadido',
+  'View Full Details': 'Ver detalles',
+  'Add All To Cart': 'Añadir todo al carrito',
+  'include': 'incluye',
+  'including': 'incluyendo',
+  'Select Option': 'Elegir opción',
+  'Price Total:': 'Total:',
+  'Media gallery': 'Galería',
+  'Oops!Page Not Found': '¡Vaya! Página no encontrada',
+  "Sorry! The page you're looking for clocked out!": 'La página que buscas no existe.',
+  'Return to Store': 'Volver a la tienda',
+  "There are {{ count }} Page(s) and article(s) for '{{ terms }}'": "Hay {{ count }} página(s) y artículo(s) para '{{ terms }}'",
+  'View {{ type }}': 'Ver {{ type }}',
+  'Page': 'Página',
+  'Search for products on our site': 'Busca productos en nuestra tienda',
+  'Phone number': 'Teléfono',
+  'Submit Contact': 'Enviar',
+  "Thanks for contacting us. We'll get back to you as soon as possible.": 'Gracias por contactarnos. Te responderemos lo antes posible.',
+  'Please adjust the following:': 'Revisa lo siguiente:',
+  'Filter by Topic': 'Filtrar por tema',
+  'Tab to show all galleries': 'Mostrar todas las galerías',
+  'Tab to filter gallery': 'Filtrar galería',
+  'Announcement': 'Anuncio',
+  '{{ count }} item': '{{ count }} artículo',
+  '{{ count }} items': '{{ count }} artículos',
+  'Your cart': 'Tu carrito',
+  'Cart items': 'Artículos del carrito',
+  'Proceed To Checkout': 'Finalizar compra',
+  'View Cart': 'Ver carrito',
+  'Remove {{ title }}': 'Eliminar {{ title }}',
+  '{{ count }} items in your shopping cart': '{{ count }} artículos en tu carrito',
+  'New subtotal': 'Nuevo subtotal',
+  'Order special instructions': 'Instrucciones del pedido',
+  'Shipping': 'Envío',
+  'Taxes and shipping fee will be calculated at checkout': 'Impuestos y envío se calculan al finalizar la compra',
+  'You May Also Like': 'También te puede gustar',
+  'There was an error while updating your cart. Please try again.': 'Error al actualizar el carrito. Inténtalo de nuevo.',
+  'You can only add {{maxQuantity}} of this product to your cart': 'Solo puedes añadir {{maxQuantity}} unidades',
+  'Brands A - Z': 'Marcas A - Z',
+  'Password modal': 'Ventana de contraseña',
+  'Load media in gallery viewer, {{ mediaAlt }}': 'Cargar imagen en la galería, {{ mediaAlt }}',
+  'Load video in gallery viewer, {{ mediaAlt }}': 'Cargar vídeo en la galería, {{ mediaAlt }}',
+  'Load 3D model in gallery viewer, {{ mediaAlt }}': 'Cargar modelo 3D, {{ mediaAlt }}',
+  "Please, hurry! Someone has placed an order on one of the items you have in the cart. We'll keep it for you for": 'Tu carrito se mantiene durante'
 };
 
 app.get('/do/fix-spanish', async (req, res) => {
@@ -454,6 +547,79 @@ app.get('/do/locale-set', async (req, res) => {
       asset: { key: 'locales/es.json', value: JSON.stringify(json, null, 2) }
     });
     res.json({ ok: true, key, antes, ahora: value });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
+// ============ DESACTIVAR BLOQUES DE URGENCIA FALSA (ficha de producto) ============
+// hot_stock ("Hurry up!"), customer_viewing ("X customers viewing"), countdown
+app.get('/do/fix-product-blocks', async (req, res) => {
+  try {
+    const confirm = req.query.confirm === 'si';
+    const targets = ['hot_stock', 'customer_viewing', 'countdown'];
+    const files = ['templates/product.json', 'templates/product.context.es.json'];
+    const report = [];
+    for (const f of files) {
+      try {
+        const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=${encodeURIComponent(f)}`);
+        const json = JSON.parse(a.asset.value);
+        let cambiados = 0;
+        for (const sid in json.sections) {
+          const s = json.sections[sid];
+          if (s.blocks) {
+            for (const bid in s.blocks) {
+              if (targets.includes(s.blocks[bid].type) && s.blocks[bid].disabled !== true) {
+                report.push({ archivo: f, seccion: sid, bloque: s.blocks[bid].type, accion: confirm ? 'desactivado' : 'se desactivaría' });
+                cambiados++;
+                if (confirm) s.blocks[bid].disabled = true;
+              }
+            }
+          }
+        }
+        if (confirm && cambiados) {
+          await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+            asset: { key: `assets/backup-${f.replace(/[\/.]/g, '-')}-${Date.now()}.json`, value: a.asset.value }
+          });
+          await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+            asset: { key: f, value: JSON.stringify(json) }
+          });
+        }
+      } catch (e) {
+        report.push({ archivo: f, error: e.response?.status || e.message });
+      }
+    }
+    res.json({ modo: confirm ? 'EJECUTADO ✅' : 'SIMULACIÓN — añade &confirm=si para ejecutar', bloques: report });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
+// ============ ASIGNAR IMAGEN AUTOMÁTICA A COLECCIONES SIN IMAGEN ============
+app.get('/do/set-collection-images', async (req, res) => {
+  try {
+    const confirm = req.query.confirm === 'si';
+    const [custom, smart] = await Promise.all([
+      shopify('get', '/custom_collections.json'),
+      shopify('get', '/smart_collections.json')
+    ]);
+    const all = [
+      ...custom.custom_collections.map(c => ({ ...c, _k: 'custom_collection', _p: 'custom_collections' })),
+      ...smart.smart_collections.map(c => ({ ...c, _k: 'smart_collection', _p: 'smart_collections' }))
+    ];
+    const sin = all.filter(c => !(c.image && c.image.src));
+    const report = [];
+    for (const c of sin) {
+      const prods = (await shopify('get', `/collections/${c.id}/products.json?limit=10`)).products;
+      const conFoto = prods.find(p => p.images && p.images.length);
+      if (!conFoto) { report.push({ coleccion: c.title, resultado: 'sin productos con foto' }); continue; }
+      const src = conFoto.images[0].src;
+      report.push({ coleccion: c.title, producto_usado: conFoto.title, accion: confirm ? 'imagen asignada' : 'se asignaría' });
+      if (confirm) {
+        await shopify('put', `/${c._p}/${c.id}.json`, { [c._k]: { id: c.id, image: { src } } });
+      }
+    }
+    res.json({ modo: confirm ? 'EJECUTADO ✅' : 'SIMULACIÓN — añade &confirm=si para ejecutar', cambios: report });
   } catch (e) {
     res.status(500).json({ error: e.message, details: e.response?.data });
   }
@@ -611,6 +777,27 @@ async function dataProductTemplate() {
   }
 }
 
+async function dataLocaleMissing() {
+  const [en, es] = await Promise.all([
+    shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/en.default.json`),
+    shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/es.json`)
+  ]);
+  const flat = (o, p = '', out = {}) => {
+    for (const k in o) {
+      const v = o[k];
+      const np = p ? p + '.' + k : k;
+      if (typeof v === 'string') out[np] = v;
+      else if (v && typeof v === 'object') flat(v, np, out);
+    }
+    return out;
+  };
+  const fe = flat(JSON.parse(en.asset.value));
+  const fs = flat(JSON.parse(es.asset.value));
+  const faltan = [];
+  for (const k in fe) if (!(k in fs)) faltan.push({ key: k, en: fe[k] });
+  return { total_claves_faltantes_en_es: faltan.length, muestra: faltan.slice(0, 120) };
+}
+
 // ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
 app.get('/', async (req, res) => {
   const secciones = {};
@@ -621,7 +808,8 @@ app.get('/', async (req, res) => {
     ['PAGINAS', dataPages],
     ['COLECCIONES', dataCollections],
     ['ARCHIVOS_LOCALES_Y_TEMPLATES', dataLocales],
-    ['TEMPLATE_PRODUCTO', dataProductTemplate]
+    ['TEMPLATE_PRODUCTO', dataProductTemplate],
+    ['CLAVES_FALTANTES_EN_ES', dataLocaleMissing]
   ];
   await Promise.all(tareas.map(async ([nombre, fn]) => {
     try { secciones[nombre] = await fn(); }
@@ -670,6 +858,10 @@ function panelHTML(datos) {
 
   <div class="card">
     <h2>🧹 Limpieza</h2>
+    <button onclick="run(this, '/do/fix-product-blocks')">🚫 Quitar urgencia falsa en fichas (simular)</button>
+    <button onclick="if(confirm('¿Desactivar hot stock, customers viewing y countdown en fichas de producto?')) run(this, '/do/fix-product-blocks?confirm=si')">🚫 Quitar urgencia falsa en fichas (EJECUTAR)</button>
+    <button onclick="run(this, '/do/set-collection-images')">🖼️ Imágenes de colecciones (simular)</button>
+    <button onclick="if(confirm('¿Asignar imagen del primer producto a las colecciones sin imagen?')) run(this, '/do/set-collection-images?confirm=si')">🖼️ Imágenes de colecciones (EJECUTAR)</button>
     <button onclick="run(this, '/do/fix-spanish')">🇪🇸 Traducir textos en inglés (simular)</button>
     <button onclick="if(confirm('¿Aplicar todas las traducciones? Se hace backup antes.')) run(this, '/do/fix-spanish?confirm=si')">🇪🇸 Traducir textos en inglés (EJECUTAR)</button>
     <button onclick="run(this, '/do/settings-set?key=current.show_countdown&value=false')">⏱️ Apagar countdown falso (simular)</button>

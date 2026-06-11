@@ -431,6 +431,29 @@ app.get('/', (req, res) => {
   </div>
 
 </div>
+<div style="max-width:900px;margin:40px auto 0;padding:20px;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);font-size:13px;">
+  <h2 style="font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:12px;">🔗 Índice API (para Claude)</h2>
+  <ul style="list-style:none;line-height:2;">
+    <li><a href="/health">/health</a></li>
+    <li><a href="/do/audit">/do/audit</a></li>
+    <li><a href="/do/check-pages">/do/check-pages</a></li>
+    <li><a href="/do/check-products">/do/check-products</a></li>
+    <li><a href="/do/locale-find?q=">/do/locale-find (todo)</a></li>
+    <li><a href="/do/locale-find?q=wish,login,search,cart,unit,hurry,subscrib,account,sold,viewing,share,sign,view,quantity,size,color">/do/locale-find (inglés común)</a></li>
+    <li><a href="/do/settings-find?q=">/do/settings-find (todo)</a></li>
+    <li><a href="/do/settings-find?q=countdown,visitor,viewing,example,congue,hurry,timer,view,sold,flash,scarcity,people,real_time,instagram">/do/settings-find (problemáticos)</a></li>
+    <li><a href="/do/fix-spanish">/do/fix-spanish (simular)</a></li>
+    <li><a href="/do/fix-spanish?confirm=si">/do/fix-spanish CONFIRM</a></li>
+    <li><a href="/do/fix-compare-at">/do/fix-compare-at (simular)</a></li>
+    <li><a href="/do/fix-compare-at?confirm=si">/do/fix-compare-at CONFIRM</a></li>
+    <li><a href="/do/settings-set?key=&value=">/do/settings-set</a></li>
+    <li><a href="/do/locale-set?key=&value=">/do/locale-set</a></li>
+    <li><a href="/collections">/collections</a></li>
+    <li><a href="/pages">/pages</a></li>
+    <li><a href="/products">/products</a></li>
+    <li><a href="/blogs">/blogs</a></li>
+  </ul>
+</div>
 <script>
 async function run(btn, url) {
   const result = btn.parentElement.querySelector('.result');

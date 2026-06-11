@@ -370,9 +370,116 @@ app.get('/do/settings-set', async (req, res) => {
   }
 });
 
-// ============ PANEL DE CONTROL ============
-app.get('/', (req, res) => {
-  res.send(`<!DOCTYPE html>
+// ============ FUNCIONES COMPARTIDAS DE DATOS ============
+async function dataAudit() {
+  const out = {};
+  const shop = await shopify('get', '/shop.json');
+  out.tienda = { nombre: shop.shop.name, dominio: shop.shop.domain, plan: shop.shop.plan_display_name, moneda: shop.shop.currency };
+  const prods = (await shopify('get', '/products.json?limit=250')).products;
+  const limpio = h => (h || '').replace(/<[^>]*>/g, '').trim();
+  out.catalogo = {
+    total: prods.length,
+    activos: prods.filter(p => p.status === 'active').length,
+    borradores: prods.filter(p => p.status === 'draft').length,
+    archivados: prods.filter(p => p.status === 'archived').length,
+    sin_foto: prods.filter(p => !p.images || p.images.length === 0).map(p => ({ id: p.id, titulo: p.title })),
+    con_una_sola_foto: prods.filter(p => p.images && p.images.length === 1).map(p => ({ id: p.id, titulo: p.title })),
+    sin_descripcion: prods.filter(p => limpio(p.body_html).length < 30).map(p => ({ id: p.id, titulo: p.title })),
+    sin_stock_activos: prods.filter(p => p.status === 'active' && p.variants.every(v => (v.inventory_quantity || 0) <= 0)).map(p => ({ id: p.id, titulo: p.title })),
+    sin_tipo_producto: prods.filter(p => !p.product_type).map(p => ({ id: p.id, titulo: p.title })),
+    descuento_fantasma: prods.filter(p => p.variants.some(v => v.compare_at_price && parseFloat(v.compare_at_price) <= parseFloat(v.price))).map(p => ({ id: p.id, titulo: p.title }))
+  };
+  try {
+    const since = new Date(Date.now() - 30 * 864e5).toISOString();
+    const orders = (await shopify('get', `/orders.json?status=any&created_at_min=${since}&limit=250`)).orders;
+    const ventas = {};
+    orders.forEach(o => (o.line_items || []).forEach(li => { ventas[li.title] = (ventas[li.title] || 0) + li.quantity; }));
+    out.pedidos_30d = {
+      total_pedidos: orders.length,
+      facturacion: orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0).toFixed(2),
+      ticket_medio: orders.length ? (orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0) / orders.length).toFixed(2) : 0,
+      mas_vendidos: Object.entries(ventas).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t, q]) => ({ producto: t, unidades: q }))
+    };
+  } catch (e) {
+    out.pedidos_30d = { error: 'No accesible (¿falta scope read_orders?): ' + (e.response?.status || e.message) };
+  }
+  return out;
+}
+
+async function dataFixSpanishSim() {
+  const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/es.json`);
+  const json = JSON.parse(a.asset.value);
+  const cambios = [];
+  const pendientes = [];
+  const esIngles = s => /^[A-Za-z0-9\s.,!?'"%:;()\-{}_*]+$/.test(s) && /[a-z]{3,}/.test(s) && !/[áéíóúñ¿¡]/i.test(s);
+  const walk = (obj, path) => {
+    for (const k in obj) {
+      const v = obj[k];
+      const p = path ? path + '.' + k : k;
+      if (typeof v === 'string') {
+        if (TRADUCCIONES[v] !== undefined) cambios.push({ key: p, antes: v, despues: TRADUCCIONES[v] });
+        else if (v.length > 1 && v.length < 120 && esIngles(v) && !v.startsWith('<')) pendientes.push({ key: p, valor: v });
+      } else if (v && typeof v === 'object') walk(v, p);
+    }
+  };
+  walk(json, '');
+  return { traducibles_con_diccionario: cambios.length, cambios, posibles_pendientes: pendientes.length, pendientes: pendientes.slice(0, 150) };
+}
+
+async function dataSettingsFind(terms) {
+  const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=config/settings_data.json`);
+  const json = JSON.parse(a.asset.value);
+  const hits = [];
+  const walk = (obj, path) => {
+    for (const k in obj) {
+      const v = obj[k];
+      const p = path ? path + '.' + k : k;
+      if (typeof v === 'string' || typeof v === 'boolean' || typeof v === 'number') {
+        const texto = (k + ' ' + String(v)).toLowerCase();
+        if (terms.some(t => texto.includes(t)) && String(v).length < 200) hits.push({ key: p, valor: v });
+      } else if (v && typeof v === 'object') walk(v, p);
+    }
+  };
+  walk(json, '');
+  return { total: hits.length, hits: hits.slice(0, 150) };
+}
+
+async function dataPages() {
+  const data = await shopify('get', '/pages.json?fields=id,title,handle,published_at');
+  return data.pages.map(p => ({ id: p.id, titulo: p.title, url: '/pages/' + p.handle, publicada: !!p.published_at }));
+}
+
+async function dataCollections() {
+  const [custom, smart] = await Promise.all([
+    shopify('get', '/custom_collections.json'),
+    shopify('get', '/smart_collections.json')
+  ]);
+  const map = c => ({ id: c.id, titulo: c.title, handle: c.handle, tiene_imagen: !!(c.image && c.image.src), publicada: !!c.published_at });
+  return { custom: custom.custom_collections.map(map), smart: smart.smart_collections.map(map) };
+}
+
+// ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
+app.get('/', async (req, res) => {
+  const secciones = {};
+  const tareas = [
+    ['AUDITORIA', dataAudit],
+    ['TRADUCCIONES_SIMULACION', dataFixSpanishSim],
+    ['AJUSTES_TEMA_SOSPECHOSOS', () => dataSettingsFind(['countdown', 'visitor', 'viewing', 'example', 'congue', 'hurry', 'timer', 'sold', 'flash', 'scarcity', 'people', 'real_time', 'instagram'])],
+    ['PAGINAS', dataPages],
+    ['COLECCIONES', dataCollections]
+  ];
+  await Promise.all(tareas.map(async ([nombre, fn]) => {
+    try { secciones[nombre] = await fn(); }
+    catch (e) { secciones[nombre] = { error: e.message, details: e.response?.data }; }
+  }));
+  const datos = Object.entries(secciones)
+    .map(([n, d]) => `===== ${n} =====\n` + JSON.stringify(d, null, 1))
+    .join('\n\n');
+  res.send(panelHTML(datos));
+});
+
+function panelHTML(datos) {
+  return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -431,28 +538,9 @@ app.get('/', (req, res) => {
   </div>
 
 </div>
-<div style="max-width:900px;margin:40px auto 0;padding:20px;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);font-size:13px;">
-  <h2 style="font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:12px;">🔗 Índice API (para Claude)</h2>
-  <ul style="list-style:none;line-height:2;">
-    <li><a href="/health">/health</a></li>
-    <li><a href="/do/audit">/do/audit</a></li>
-    <li><a href="/do/check-pages">/do/check-pages</a></li>
-    <li><a href="/do/check-products">/do/check-products</a></li>
-    <li><a href="/do/locale-find?q=">/do/locale-find (todo)</a></li>
-    <li><a href="/do/locale-find?q=wish,login,search,cart,unit,hurry,subscrib,account,sold,viewing,share,sign,view,quantity,size,color">/do/locale-find (inglés común)</a></li>
-    <li><a href="/do/settings-find?q=">/do/settings-find (todo)</a></li>
-    <li><a href="/do/settings-find?q=countdown,visitor,viewing,example,congue,hurry,timer,view,sold,flash,scarcity,people,real_time,instagram">/do/settings-find (problemáticos)</a></li>
-    <li><a href="/do/fix-spanish">/do/fix-spanish (simular)</a></li>
-    <li><a href="/do/fix-spanish?confirm=si">/do/fix-spanish CONFIRM</a></li>
-    <li><a href="/do/fix-compare-at">/do/fix-compare-at (simular)</a></li>
-    <li><a href="/do/fix-compare-at?confirm=si">/do/fix-compare-at CONFIRM</a></li>
-    <li><a href="/do/settings-set?key=&value=">/do/settings-set</a></li>
-    <li><a href="/do/locale-set?key=&value=">/do/locale-set</a></li>
-    <li><a href="/collections">/collections</a></li>
-    <li><a href="/pages">/pages</a></li>
-    <li><a href="/products">/products</a></li>
-    <li><a href="/blogs">/blogs</a></li>
-  </ul>
+<div style="max-width:900px;margin:40px auto 0;padding:20px;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+  <h2 style="font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:12px;">📡 Datos en vivo (auditoría automática)</h2>
+  <pre style="font-size:11px;white-space:pre-wrap;max-height:600px;overflow:auto;">${datos.replace(/</g, '&lt;')}</pre>
 </div>
 <script>
 async function run(btn, url) {
@@ -472,8 +560,8 @@ async function run(btn, url) {
 }
 </script>
 </body>
-</html>`);
-});
+</html>`;
+}
 
 // ============ RUTAS EXISTENTES ============
 app.get('/do/check-pages', async (req, res) => {

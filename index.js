@@ -14,18 +14,46 @@ app.use((req, res, next) => {
 const SHOP = process.env.SHOP_DOMAIN;
 const CLIENT_ID = process.env.CLIENT_ID || 'c71f0a73eb33baccae7555709567abf6';
 const CLIENT_SECRET = process.env.CLIENT_SECRET || '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';
-const ACCESS_TOKEN = process.env.SHOPIFY_TOKEN;
+let ACCESS_TOKEN = process.env.SHOPIFY_TOKEN;
 const THEME_ID = 162207236386;
 
+async function refreshToken() {
+  const r = await axios.post(
+    `https://${SHOP}/admin/oauth/access_token`,
+    new URLSearchParams({ grant_type: 'client_credentials', client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
+  ACCESS_TOKEN = r.data.access_token;
+  return ACCESS_TOKEN;
+}
+
 const shopify = async (method, path, data) => {
-  const r = await axios({
+  const call = () => axios({
     method,
     url: `https://${SHOP}/admin/api/2025-01${path}`,
     data,
     headers: { 'X-Shopify-Access-Token': ACCESS_TOKEN, 'Content-Type': 'application/json' }
   });
-  return r.data;
+  try {
+    return (await call()).data;
+  } catch (e) {
+    if (e.response && e.response.status === 401) {
+      await refreshToken();
+      return (await call()).data;
+    }
+    throw e;
+  }
 };
+
+// Refresco manual: /do/refresh-token (útil tras cambiar scopes de la app)
+app.get('/do/refresh-token', async (req, res) => {
+  try {
+    const t = await refreshToken();
+    res.json({ ok: true, token_preview: t.slice(0, 10) + '...' });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
 
 // ============ AUDITORÍA COMPLETA ============
 app.get('/do/audit', async (req, res) => {
@@ -265,7 +293,111 @@ const TRADUCCIONES = {
   'Hide': 'Ocultar',
   'Color': 'Color',
   'Size': 'Talla',
-  'Material': 'Material'
+  'Material': 'Material',
+  // ===== Diccionario v2 =====
+  'Categories': 'Categorías',
+  'Click to watch video': 'Ver vídeo',
+  'Scroll Down': 'Desliza hacia abajo',
+  'Search products...': 'Buscar productos...',
+  'Search for a product...': 'Buscar un producto...',
+  'Search the store': 'Buscar en la tienda',
+  'Search entire store here...': 'Busca en toda la tienda...',
+  'Product Results': 'Resultados',
+  'Search for': 'Buscar',
+  'Search more': 'Ver más resultados',
+  'View All Results ({{ count }})': 'Ver todos los resultados ({{ count }})',
+  'Label Search': 'Buscador',
+  'Shopping Cart': 'Carrito',
+  'View my cart ({{ count }})': 'Ver mi carrito ({{ count }})',
+  'Item added to your cart': 'Producto añadido al carrito',
+  'Calculate Shipping': 'Calcular envío',
+  'Calculating...': 'Calculando...',
+  'Error: Please enter right shipping information': 'Error: revisa los datos de envío',
+  'There are': 'Hay',
+  'shipping rates available for': 'tarifas de envío disponibles para',
+  ', starting at': ', desde',
+  'There is one shipping rate available for': 'Hay una tarifa de envío disponible para',
+  'There is no shipping rate available for this order and destination.': 'No hay tarifa de envío disponible para este pedido y destino.',
+  'minutes.': 'minutos.',
+  'Additional Comments': 'Comentarios adicionales',
+  'Special instruction for seller...': 'Instrucciones para el vendedor...',
+  'Secure Shopping Guarantee': 'Compra 100% segura',
+  'Save': 'Guardar',
+  'Cancel': 'Cancelar',
+  'Adding...': 'Añadiendo...',
+  'Add A Gift Wrap': 'Añadir envoltorio de regalo',
+  'Order Summary': 'Resumen del pedido',
+  'Get Shipping Estimate:': 'Calcular gastos de envío:',
+  'Coupon Code': 'Código de descuento',
+  'Coupon code will be applied on the checkout page': 'El código se aplicará al finalizar la compra',
+  'Estimate Shipping Rates': 'Calcular envío',
+  'State': 'Provincia',
+  'ZIP Code': 'Código postal',
+  'Postal Code': 'Código postal',
+  'Enter Coupon Code': 'Introduce el código',
+  'sold out': 'agotado',
+  'Discount:': 'Descuento:',
+  'Link': 'Enlace',
+  'Show more': 'Ver más',
+  'Loading...': 'Cargando...',
+  'View All Collection': 'Ver toda la colección',
+  'No More Product': 'No hay más productos',
+  'enter your email address': 'tu correo electrónico',
+  'Your Email Address': 'Tu correo electrónico',
+  'Sign Me Up': 'Suscribirme',
+  'Start Now': 'Empezar',
+  "don't miss out this sale": 'no te pierdas esta oferta',
+  'Skip to content': 'Ir al contenido',
+  'Skip to product information': 'Ir a la información del producto',
+  'Vendor:': 'Marca:',
+  'Choosing a selection results in a full page refresh.': 'Al elegir una opción se recarga la página.',
+  'Opens in a new window.': 'Se abre en una ventana nueva.',
+  'Opens external website.': 'Abre una web externa.',
+  'Slide right': 'Deslizar a la derecha',
+  'Slide left': 'Deslizar a la izquierda',
+  'Page {{ number }}': 'Página {{ number }}',
+  'Pagination': 'Paginación',
+  'Prev': 'Anterior',
+  'Go Back To Previous page': 'Volver a la página anterior',
+  'Leave a comment': 'Deja un comentario',
+  'Name': 'Nombre',
+  'Comment': 'Comentario',
+  'Post comment': 'Publicar comentario',
+  'Back to blog': 'Volver al blog',
+  'Share this article': 'Compartir este artículo',
+  '{{ count }} comment': '{{ count }} comentario',
+  '{{ count }} Comments': '{{ count }} comentarios',
+  'Older Post': 'Anterior',
+  'Newer Post': 'Siguiente',
+  'Prev Post': 'Anterior',
+  'Next Post': 'Siguiente',
+  'Tags:': 'Etiquetas:',
+  'Read more: {{ title }}': 'Leer más: {{ title }}',
+  'View Details': 'Ver detalles',
+  'featured': 'destacado',
+  'Please note, comments need to be approved before they are published.': 'Los comentarios se revisan antes de publicarse.',
+  'All blog comments are checked prior to publishing': 'Los comentarios se revisan antes de publicarse',
+  'Your comment was posted successfully! Thank you!': '¡Comentario publicado! Gracias.',
+  'Your comment was posted successfully. We will publish it in a little while, as our blog is moderated.': 'Comentario enviado. Se publicará tras revisión.',
+  'Example product title': 'Producto de ejemplo',
+  "Your collection's name": 'Nombre de la colección',
+  'Adding to cart...': 'Añadiendo...',
+  'Add All to cart': 'Añadir todo al carrito',
+  'Adding All to cart...': 'Añadiendo todo...',
+  'Added to cart': 'Añadido al carrito',
+  'You must select at least one products to add!': 'Selecciona al menos un producto',
+  'is added to your shopping cart.': 'se ha añadido a tu carrito.',
+  'Product variants': 'Variantes',
+  'Details': 'Detalles',
+  'Enter store using password:': 'Introduce la contraseña:',
+  'Enter using password': 'Entrar con contraseña',
+  'Your password': 'Tu contraseña',
+  'Wrong password!': 'Contraseña incorrecta',
+  'Enter': 'Entrar',
+  'Early access password...': 'Contraseña de acceso...',
+  'Enter Password': 'Introduce la contraseña',
+  'Blog': 'Blog',
+  'Email': 'Email'
 };
 
 app.get('/do/fix-spanish', async (req, res) => {
@@ -458,15 +590,38 @@ async function dataCollections() {
   return { custom: custom.custom_collections.map(map), smart: smart.smart_collections.map(map) };
 }
 
+async function dataLocales() {
+  const a = await shopify('get', `/themes/${THEME_ID}/assets.json`);
+  return a.assets.filter(x => x.key.startsWith('locales/') || x.key.startsWith('templates/product')).map(x => x.key);
+}
+
+async function dataProductTemplate() {
+  try {
+    const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=templates/product.json`);
+    const json = JSON.parse(a.asset.value);
+    const resumen = {};
+    for (const id in json.sections) {
+      const s = json.sections[id];
+      resumen[id] = { type: s.type, settings_claves: Object.entries(s.settings || {}).filter(([k, v]) => typeof v === 'boolean' || (typeof v === 'string' && v.length < 80)).slice(0, 40) };
+      if (s.blocks) resumen[id].blocks = Object.values(s.blocks).map(b => b.type);
+    }
+    return { order: json.order, secciones: resumen };
+  } catch (e) {
+    return { error: 'templates/product.json no existe (tema no OS2 en producto): ' + (e.response?.status || e.message) };
+  }
+}
+
 // ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
 app.get('/', async (req, res) => {
   const secciones = {};
   const tareas = [
     ['AUDITORIA', dataAudit],
     ['TRADUCCIONES_SIMULACION', dataFixSpanishSim],
-    ['AJUSTES_TEMA_SOSPECHOSOS', () => dataSettingsFind(['countdown', 'visitor', 'viewing', 'example', 'congue', 'hurry', 'timer', 'sold', 'flash', 'scarcity', 'people', 'real_time', 'instagram'])],
+    ['AJUSTES_TEMA_SOSPECHOSOS', () => dataSettingsFind(['countdown', 'visitor', 'viewing', 'viewer', 'example', 'congue', 'hurry', 'timer', 'sold', 'flash', 'scarcity', 'people', 'real_time', 'instagram', 'random', 'fake', 'cart_count', 'related', 'recommend'])],
     ['PAGINAS', dataPages],
-    ['COLECCIONES', dataCollections]
+    ['COLECCIONES', dataCollections],
+    ['ARCHIVOS_LOCALES_Y_TEMPLATES', dataLocales],
+    ['TEMPLATE_PRODUCTO', dataProductTemplate]
   ];
   await Promise.all(tareas.map(async ([nombre, fn]) => {
     try { secciones[nombre] = await fn(); }

@@ -821,6 +821,21 @@ async function dataIndexTemplate() {
   return { order: json.order, secciones: resumen };
 }
 
+async function dataSmartRules() {
+  const smart = (await shopify('get', '/smart_collections.json')).smart_collections;
+  return smart.map(c => ({ titulo: c.title, handle: c.handle, reglas: c.rules, condicion: c.disjunctive ? 'cualquiera' : 'todas' }));
+}
+
+async function dataProductTypes() {
+  const prods = (await shopify('get', '/products.json?limit=250&fields=id,title,product_type,status,tags,images')).products;
+  const tipos = {};
+  prods.forEach(p => { tipos[p.product_type || '(sin tipo)'] = (tipos[p.product_type || '(sin tipo)'] || 0) + 1; });
+  const bolsos = prods
+    .filter(p => /bolso|bandolera|clutch|tote|capazo|mochila|bag/i.test(p.title + ' ' + (p.tags || '')))
+    .map(p => ({ id: p.id, titulo: p.title, tipo: p.product_type || '(sin tipo)', tags: p.tags, estado: p.status, fotos: (p.images || []).length }));
+  return { tipos_de_producto: tipos, posibles_bolsos: bolsos };
+}
+
 // ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
 app.get('/', async (req, res) => {
   const secciones = {};
@@ -833,7 +848,9 @@ app.get('/', async (req, res) => {
     ['ARCHIVOS_LOCALES_Y_TEMPLATES', dataLocales],
     ['TEMPLATE_PRODUCTO', dataProductTemplate],
     ['CLAVES_FALTANTES_EN_ES', dataLocaleMissing],
-    ['TEMPLATE_HOME', dataIndexTemplate]
+    ['TEMPLATE_HOME', dataIndexTemplate],
+    ['REGLAS_COLECCIONES', dataSmartRules],
+    ['TIPOS_Y_BOLSOS', dataProductTypes]
   ];
   secciones['BUILD'] = BUILD;
   secciones['TAREAS_BOOT'] = BOOT_LOG;
@@ -1012,7 +1029,7 @@ app.get('/collections', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // ============ TAREAS DE ARRANQUE (auto-ejecución en cada deploy) ============
-const BUILD = 'v5 — 2026-06-11';
+const BUILD = 'v6 — 2026-06-11';
 const BOOT_LOG = [];
 
 function setByPath(obj, path, value) {
@@ -1050,7 +1067,7 @@ async function taskMergeMissingLocaleKeys() {
     if (k in fs) continue;
     const v = fe[k];
     if (TRADUCCIONES[v] !== undefined) { setByPath(esJson, k, TRADUCCIONES[v]); aniadidas++; }
-    else if (/[áéíóúñÁÉÍÓÚÑ¿¡]/.test(v) || /^(y|, y|A - Z|Z - A|Sí|No|Gratis|Aplicar|Error|Carrito|Cerrar|Checkout|Total|Subtotal|Email|Blog)$/.test(v)) { setByPath(esJson, k, v); aniadidas++; }
+    else if (k.startsWith('shopify.') || /[áéíóúñÁÉÍÓÚÑ¿¡]/.test(v) || /^(y|, y|A - Z|Z - A|Sí|No|Gratis|Aplicar|Error|Carrito|Cerrar|Checkout|Total|Subtotal|Email|Blog)$/.test(v)) { setByPath(esJson, k, v); aniadidas++; }
     else omitidas.push({ key: k, en: v });
   }
   if (aniadidas) {
@@ -1102,10 +1119,65 @@ async function taskFixTemplateTexts() {
   return report;
 }
 
+// T3: corregir enlaces rotos y textos de la home (templates/index.json)
+async function taskFixHomeLinks() {
+  const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=templates/index.json`);
+  const json = JSON.parse(a.asset.value);
+  const cambios = [];
+  const set = (desc, obj, key, nuevo) => {
+    if (obj && obj[key] !== undefined && obj[key] !== nuevo) {
+      cambios.push({ cambio: desc, antes: obj[key], ahora: nuevo });
+      obj[key] = nuevo;
+    }
+  };
+  const S = json.sections;
+  // Banner principal: enlace a colección inexistente "vestido-largo" → novedades
+  const slide = S['16321237356a896dad'];
+  if (slide && slide.blocks) {
+    const b = slide.blocks['c537f70d-cebd-4a77-bc92-2d49d06fc121'];
+    if (b) set('banner_principal_link', b.settings, 'link', 'shopify://collections/novedades');
+  }
+  // Sección Novedades: "Ver todo" → novedades
+  const nov = S['163247026462da6862'];
+  if (nov) set('novedades_ver_todo', nov.settings, 'link_view_all', 'shopify://collections/novedades');
+  // Sección Instagram: enlaces a colecciones demo inexistentes → perfil real
+  const insta = S['1632364695b0f88b4f'];
+  if (insta) {
+    set('instagram_boton', insta.settings, 'instagram_button_link', 'https://www.instagram.com/kutch.es/');
+    if (insta.blocks) {
+      const ib = insta.blocks['566545cd-024f-4585-941a-d5bd625fbe4c'];
+      if (ib) set('instagram_bloque_1', ib.settings, 'link', 'https://www.instagram.com/kutch.es/');
+    }
+  }
+  // Newsletter: botón "Subscribe" → "Suscribirme"
+  const news = S['f0e8527c-e654-4614-a464-46a98278aae1'];
+  if (news && news.blocks) {
+    const nb = news.blocks['9fbf7a37-f7c1-4b69-9fab-5b8e3e289862'];
+    if (nb) set('newsletter_boton', nb.settings, 'button_text', 'Suscribirme');
+  }
+  // Bloque de políticas en inglés → texto coherente en español
+  const pol = S['policies_block_hrFgpe'];
+  if (pol && pol.blocks) {
+    const pb = pol.blocks['text_G4UUep'];
+    if (pb) {
+      set('politicas_texto_ingles', pb.settings, 'text', 'Entrega en 24/48h');
+      set('politicas_descripcion', pb.settings, 'description', 'en toda la península');
+    }
+  }
+  if (cambios.length) {
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: `assets/backup-index-boot-${Date.now()}.json`, value: a.asset.value }
+    });
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, { asset: { key: 'templates/index.json', value: JSON.stringify(json) } });
+  }
+  return { cambios_aplicados: cambios.length, detalle: cambios };
+}
+
 async function runBootTasks() {
   const tasks = [
     ['merge_claves_es', taskMergeMissingLocaleKeys],
-    ['textos_plantilla_producto', taskFixTemplateTexts]
+    ['textos_plantilla_producto', taskFixTemplateTexts],
+    ['enlaces_y_textos_home', taskFixHomeLinks]
   ];
   for (const [nombre, fn] of tasks) {
     try { BOOT_LOG.push({ tarea: nombre, resultado: await fn() }); }

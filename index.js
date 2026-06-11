@@ -798,6 +798,29 @@ async function dataLocaleMissing() {
   return { total_claves_faltantes_en_es: faltan.length, muestra: faltan.slice(0, 120) };
 }
 
+async function dataIndexTemplate() {
+  const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=templates/index.json`);
+  const json = JSON.parse(a.asset.value);
+  const resumen = {};
+  for (const id in json.sections) {
+    const s = json.sections[id];
+    const entry = { type: s.type };
+    const interesantes = Object.entries(s.settings || {}).filter(([k, v]) =>
+      typeof v === 'string' && v.length < 120 && (k.includes('image') || k.includes('title') || k.includes('collection') || k.includes('link') || k.includes('heading'))
+    );
+    if (interesantes.length) entry.settings = interesantes;
+    if (s.blocks) {
+      entry.blocks = Object.entries(s.blocks).map(([bid, b]) => ({
+        id: bid,
+        type: b.type,
+        settings: Object.entries(b.settings || {}).filter(([k, v]) => typeof v === 'string' && v.length < 150)
+      }));
+    }
+    resumen[id] = entry;
+  }
+  return { order: json.order, secciones: resumen };
+}
+
 // ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
 app.get('/', async (req, res) => {
   const secciones = {};
@@ -809,8 +832,11 @@ app.get('/', async (req, res) => {
     ['COLECCIONES', dataCollections],
     ['ARCHIVOS_LOCALES_Y_TEMPLATES', dataLocales],
     ['TEMPLATE_PRODUCTO', dataProductTemplate],
-    ['CLAVES_FALTANTES_EN_ES', dataLocaleMissing]
+    ['CLAVES_FALTANTES_EN_ES', dataLocaleMissing],
+    ['TEMPLATE_HOME', dataIndexTemplate]
   ];
+  secciones['BUILD'] = BUILD;
+  secciones['TAREAS_BOOT'] = BOOT_LOG;
   await Promise.all(tareas.map(async ([nombre, fn]) => {
     try { secciones[nombre] = await fn(); }
     catch (e) { secciones[nombre] = { error: e.message, details: e.response?.data }; }
@@ -984,4 +1010,110 @@ app.get('/collections', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Kutch API running on port ${PORT}`));
+
+// ============ TAREAS DE ARRANQUE (auto-ejecución en cada deploy) ============
+const BUILD = 'v5 — 2026-06-11';
+const BOOT_LOG = [];
+
+function setByPath(obj, path, value) {
+  const parts = path.split('.');
+  let o = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!(parts[i] in o) || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+    o = o[parts[i]];
+  }
+  o[parts[parts.length - 1]] = value;
+}
+
+const flatten = (o, p = '', out = {}) => {
+  for (const k in o) {
+    const v = o[k];
+    const np = p ? p + '.' + k : k;
+    if (typeof v === 'string') out[np] = v;
+    else if (v && typeof v === 'object') flatten(v, np, out);
+  }
+  return out;
+};
+
+// T1: añadir a es.json las claves que faltan (causa de los textos en inglés por fallback)
+async function taskMergeMissingLocaleKeys() {
+  const [en, es] = await Promise.all([
+    shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/en.default.json`),
+    shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/es.json`)
+  ]);
+  const fe = flatten(JSON.parse(en.asset.value));
+  const esJson = JSON.parse(es.asset.value);
+  const fs = flatten(esJson);
+  let aniadidas = 0;
+  const omitidas = [];
+  for (const k in fe) {
+    if (k in fs) continue;
+    const v = fe[k];
+    if (TRADUCCIONES[v] !== undefined) { setByPath(esJson, k, TRADUCCIONES[v]); aniadidas++; }
+    else if (/[áéíóúñÁÉÍÓÚÑ¿¡]/.test(v) || /^(y|, y|A - Z|Z - A|Sí|No|Gratis|Aplicar|Error|Carrito|Cerrar|Checkout|Total|Subtotal|Email|Blog)$/.test(v)) { setByPath(esJson, k, v); aniadidas++; }
+    else omitidas.push({ key: k, en: v });
+  }
+  if (aniadidas) {
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: `assets/backup-es-boot-${Date.now()}.json`, value: es.asset.value }
+    });
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: 'locales/es.json', value: JSON.stringify(esJson, null, 2) }
+    });
+  }
+  return { claves_aniadidas: aniadidas, sin_traduccion_pendientes: omitidas.slice(0, 30) };
+}
+
+// T2: corregir textos en inglés incrustados en las plantillas de producto
+async function taskFixTemplateTexts() {
+  const mapa = {
+    'Description': 'Descripción',
+    'DESCRIPTION': 'DESCRIPCIÓN',
+    'Reviews': 'Opiniones',
+    'Login': 'Acceso',
+    'this is just a warning': 'Aviso'
+  };
+  const files = ['templates/product.json', 'templates/product.context.es.json'];
+  const report = [];
+  for (const f of files) {
+    try {
+      const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=${encodeURIComponent(f)}`);
+      const json = JSON.parse(a.asset.value);
+      let cambios = 0;
+      const walk = obj => {
+        for (const k in obj) {
+          const v = obj[k];
+          if (typeof v === 'string' && mapa[v] !== undefined) { obj[k] = mapa[v]; cambios++; }
+          else if (v && typeof v === 'object') walk(v);
+        }
+      };
+      walk(json);
+      if (cambios) {
+        await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+          asset: { key: `assets/backup-${f.replace(/[\/.]/g, '-')}-boot-${Date.now()}.json`, value: a.asset.value }
+        });
+        await shopify('put', `/themes/${THEME_ID}/assets.json`, { asset: { key: f, value: JSON.stringify(json) } });
+      }
+      report.push({ archivo: f, textos_corregidos: cambios });
+    } catch (e) {
+      report.push({ archivo: f, error: e.response?.status || e.message });
+    }
+  }
+  return report;
+}
+
+async function runBootTasks() {
+  const tasks = [
+    ['merge_claves_es', taskMergeMissingLocaleKeys],
+    ['textos_plantilla_producto', taskFixTemplateTexts]
+  ];
+  for (const [nombre, fn] of tasks) {
+    try { BOOT_LOG.push({ tarea: nombre, resultado: await fn() }); }
+    catch (e) { BOOT_LOG.push({ tarea: nombre, error: e.message, details: e.response?.data }); }
+  }
+}
+
+app.listen(PORT, () => {
+  console.log(`Kutch API running on port ${PORT} — build ${BUILD}`);
+  setTimeout(() => runBootTasks().catch(e => BOOT_LOG.push({ error: e.message })), 4000);
+});

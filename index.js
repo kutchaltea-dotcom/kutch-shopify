@@ -152,6 +152,181 @@ app.get('/do/fix-compare-at', async (req, res) => {
   }
 });
 
+// ============ TRADUCIR TEXTOS EN INGLÉS (locales/es.json) ============
+// Simula por defecto. Ejecutar: /do/fix-spanish?confirm=si
+const TRADUCCIONES = {
+  'Account': 'Cuenta',
+  'Search': 'Buscar',
+  'Wishlist': 'Lista de deseos',
+  'Wish Lists': 'Lista de deseos',
+  'My Wish List': 'Mi lista de deseos',
+  'Add to wishlist': 'Añadir a la lista de deseos',
+  'Add To Wishlist': 'Añadir a la lista de deseos',
+  'Remove from wishlist': 'Quitar de la lista de deseos',
+  'Log in': 'Iniciar sesión',
+  'Log out': 'Cerrar sesión',
+  'Sign In': 'Iniciar sesión',
+  'Sign in': 'Iniciar sesión',
+  'Create an Account': 'Crear cuenta',
+  'Create account': 'Crear cuenta',
+  'Email Address': 'Correo electrónico',
+  'Email address': 'Correo electrónico',
+  'Your email': 'Tu correo electrónico',
+  'Password': 'Contraseña',
+  'Forgot your password?': '¿Has olvidado tu contraseña?',
+  'Add to cart': 'Añadir al carrito',
+  'Add to Cart': 'Añadir al carrito',
+  'Buy it now': 'Comprar ahora',
+  'Sold out': 'Agotado',
+  'Sold Out': 'Agotado',
+  'Sold': 'Vendido',
+  'Sale': 'Oferta',
+  'Unit price': 'Precio unitario',
+  'per': 'por',
+  'Quantity': 'Cantidad',
+  'Quantity:': 'Cantidad:',
+  'Description': 'Descripción',
+  'Reviews': 'Opiniones',
+  'Close': 'Cerrar',
+  'Share': 'Compartir',
+  'Share on Facebook': 'Compartir en Facebook',
+  'Tweet on Twitter': 'Compartir en Twitter',
+  'Pin on Pinterest': 'Compartir en Pinterest',
+  'Share on Pinterest': 'Compartir en Pinterest',
+  'Copy link': 'Copiar enlace',
+  'Link copied to clipboard!': '¡Enlace copiado!',
+  'Thanks for subscribing!': '¡Gracias por suscribirte!',
+  'This email has been registered!': '¡Este correo ya está registrado!',
+  'Subscribe': 'Suscribirse',
+  'Choose Options': 'Elegir opciones',
+  'Shop the look': 'Compra el look',
+  'Shop The Look': 'Compra el look',
+  'View all': 'Ver todo',
+  'View more': 'Ver más',
+  'View cart': 'Ver carrito',
+  'Home': 'Inicio',
+  'Cart': 'Carrito',
+  'Checkout': 'Finalizar compra',
+  'Check out': 'Finalizar compra',
+  'Continue shopping': 'Seguir comprando',
+  'Continue Shopping': 'Seguir comprando',
+  'Out of stock': 'Agotado',
+  'Out Of Stock': 'Agotado',
+  'In stock': 'En stock',
+  'Free shipping': 'Envío gratis',
+  'Edit Option': 'Editar opción',
+  'this is just a warning': 'Aviso',
+  'Early Access Login': 'Acceso anticipado',
+  'Early Access Login*': 'Acceso anticipado*',
+  'items': 'artículos',
+  'item': 'artículo',
+  'Menu': 'Menú',
+  'Shop': 'Tienda',
+  'Next': 'Siguiente',
+  'Previous': 'Anterior',
+  'Submit': 'Enviar',
+  'Send': 'Enviar',
+  'Apply': 'Aplicar',
+  'Remove': 'Eliminar',
+  'Update': 'Actualizar',
+  'Total': 'Total',
+  'Subtotal': 'Subtotal',
+  'Decrease quantity for {{ title }}': 'Reducir cantidad de {{ title }}',
+  'Increase quantity for {{ title }}': 'Aumentar cantidad de {{ title }}',
+  '{{ count }} customers are viewing this product': '{{ count }} personas están viendo este producto',
+  'Hurry up! Only {{ count }} left': '¡Date prisa! Solo quedan {{ count }}',
+  'Hurry up! only {{ count }} left': '¡Date prisa! Solo quedan {{ count }}',
+  'Hurry Up! Only {{ count }} Left in Stock': '¡Date prisa! Solo quedan {{ count }} en stock',
+  'Limited-Time Offers, End in:': 'Oferta por tiempo limitado. Termina en:',
+  'You may also like': 'También te puede gustar',
+  'Related Products': 'Productos relacionados',
+  'Recently Viewed Products': 'Vistos recientemente',
+  'Customer Reviews': 'Opiniones de clientes',
+  'Write a review': 'Escribir una opinión',
+  'Newsletter': 'Newsletter',
+  'Your cart is empty': 'Tu carrito está vacío',
+  'Your cart is currently empty.': 'Tu carrito está vacío.',
+  'Special instructions for seller': 'Instrucciones especiales para el vendedor',
+  'Agree with the terms and conditions': 'Acepto los términos y condiciones',
+  'Availability': 'Disponibilidad',
+  'Vendor': 'Marca',
+  'Product Type': 'Tipo de producto',
+  'Tags': 'Etiquetas',
+  'Size Guide': 'Guía de tallas',
+  'Ask About This Product': 'Pregunta sobre este producto',
+  'Compare Color': 'Comparar colores',
+  'Confirm Your Choice': 'Confirma tu elección',
+  'Back To Top': 'Volver arriba',
+  'Filter': 'Filtrar',
+  'Sort by': 'Ordenar por',
+  'Sort By': 'Ordenar por',
+  'Clear All': 'Borrar todo',
+  'Show': 'Mostrar',
+  'Hide': 'Ocultar',
+  'Color': 'Color',
+  'Size': 'Talla',
+  'Material': 'Material'
+};
+
+app.get('/do/fix-spanish', async (req, res) => {
+  try {
+    const confirm = req.query.confirm === 'si';
+    const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/es.json`);
+    const json = JSON.parse(a.asset.value);
+    const cambios = [];
+    const walk = (obj, path) => {
+      for (const k in obj) {
+        const v = obj[k];
+        const p = path ? path + '.' + k : k;
+        if (typeof v === 'string' && TRADUCCIONES[v] !== undefined) {
+          cambios.push({ key: p, antes: v, despues: TRADUCCIONES[v] });
+          if (confirm) obj[k] = TRADUCCIONES[v];
+        } else if (v && typeof v === 'object') walk(v, p);
+      }
+    };
+    walk(json, '');
+    if (confirm && cambios.length) {
+      await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+        asset: { key: `assets/backup-es-${Date.now()}.json`, value: a.asset.value }
+      });
+      await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+        asset: { key: 'locales/es.json', value: JSON.stringify(json, null, 2) }
+      });
+    }
+    res.json({ modo: confirm ? 'EJECUTADO ✅' : 'SIMULACIÓN — añade &confirm=si para ejecutar', total: cambios.length, cambios });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
+// ============ MODIFICAR UNA TRADUCCIÓN SUELTA ============
+// Uso: /do/locale-set?key=general.common.account&value=Cuenta&confirm=si
+app.get('/do/locale-set', async (req, res) => {
+  try {
+    const { key, value, confirm } = req.query;
+    if (!key || value === undefined) return res.json({ error: 'Faltan parámetros: key y value' });
+    if (confirm !== 'si') return res.json({ modo: 'SIMULACIÓN — añade &confirm=si para ejecutar', key, value });
+    const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=locales/es.json`);
+    const json = JSON.parse(a.asset.value);
+    const parts = key.split('.');
+    let obj = json;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in obj)) return res.json({ error: 'Ruta no existe: ' + parts.slice(0, i + 1).join('.') });
+      obj = obj[parts[i]];
+    }
+    const last = parts[parts.length - 1];
+    if (!(last in obj)) return res.json({ error: 'Clave no existe: ' + key });
+    const antes = obj[last];
+    obj[last] = value;
+    await shopify('put', `/themes/${THEME_ID}/assets.json`, {
+      asset: { key: 'locales/es.json', value: JSON.stringify(json, null, 2) }
+    });
+    res.json({ ok: true, key, antes, ahora: value });
+  } catch (e) {
+    res.status(500).json({ error: e.message, details: e.response?.data });
+  }
+});
+
 // ============ MODIFICAR AJUSTE DEL TEMA (con backup automático) ============
 // Uso: /do/settings-set?key=current.show_countdown&value=false&confirm=si
 app.get('/do/settings-set', async (req, res) => {
@@ -233,6 +408,8 @@ app.get('/', (req, res) => {
 
   <div class="card">
     <h2>🧹 Limpieza</h2>
+    <button onclick="run(this, '/do/fix-spanish')">🇪🇸 Traducir textos en inglés (simular)</button>
+    <button onclick="if(confirm('¿Aplicar todas las traducciones? Se hace backup antes.')) run(this, '/do/fix-spanish?confirm=si')">🇪🇸 Traducir textos en inglés (EJECUTAR)</button>
     <button onclick="run(this, '/do/settings-set?key=current.show_countdown&value=false')">⏱️ Apagar countdown falso (simular)</button>
     <button onclick="if(confirm('¿Apagar el countdown en toda la web?')) run(this, '/do/settings-set?key=current.show_countdown&value=false&confirm=si')">⏱️ Apagar countdown falso (EJECUTAR)</button>
     <button onclick="run(this, '/do/fix-compare-at')">👻 Descuentos fantasma (simular)</button>

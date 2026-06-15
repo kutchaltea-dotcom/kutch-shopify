@@ -827,13 +827,17 @@ async function dataSmartRules() {
 }
 
 async function dataProductTypes() {
-  const prods = (await shopify('get', '/products.json?limit=250&fields=id,title,product_type,status,tags,images')).products;
+  const prods = (await shopify('get', '/products.json?limit=250&fields=id,title,product_type,status,tags,images,variants')).products;
   const tipos = {};
   prods.forEach(p => { tipos[p.product_type || '(sin tipo)'] = (tipos[p.product_type || '(sin tipo)'] || 0) + 1; });
   const bolsos = prods
-    .filter(p => /bolso|bandolera|clutch|tote|capazo|mochila|bag/i.test(p.title + ' ' + (p.tags || '')))
+    .filter(p => /bolso|bandolera|clutch|tote|capazo|mochila|bag|cesta|cartera|monedero|neceser|riñonera|shopper/i.test(p.title + ' ' + (p.tags || '') + ' ' + (p.product_type || '')))
     .map(p => ({ id: p.id, titulo: p.title, tipo: p.product_type || '(sin tipo)', tags: p.tags, estado: p.status, fotos: (p.images || []).length }));
-  return { tipos_de_producto: tipos, posibles_bolsos: bolsos };
+  const catalogo_completo = prods.map(p => ({
+    id: p.id, titulo: p.title, tipo: p.product_type || '(sin tipo)', tags: p.tags || '',
+    precio: p.variants && p.variants[0] ? p.variants[0].price : null, fotos: (p.images || []).length, estado: p.status
+  }));
+  return { tipos_de_producto: tipos, posibles_bolsos: bolsos, catalogo_completo };
 }
 
 // ============ PANEL DE CONTROL (con datos embebidos para Claude) ============
@@ -1029,7 +1033,7 @@ app.get('/collections', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // ============ TAREAS DE ARRANQUE (auto-ejecución en cada deploy) ============
-const BUILD = 'v6 — 2026-06-11';
+const BUILD = 'v7 — 2026-06-15';
 const BOOT_LOG = [];
 
 function setByPath(obj, path, value) {
@@ -1173,11 +1177,76 @@ async function taskFixHomeLinks() {
   return { cambios_aplicados: cambios.length, detalle: cambios };
 }
 
+// T4: corregir fichas incompletas (tipos de producto + descripción Poncho Aimara)
+async function taskFixProductFichas() {
+  const report = [];
+  // Tipos de producto faltantes — inferidos del título/colección
+  const tipos = {
+    8872438071586: 'Vestido largo',   // Frida
+    8872437973282: 'Vestido largo'    // Loulou
+  };
+  for (const id in tipos) {
+    try {
+      const cur = (await shopify('get', `/products/${id}.json?fields=id,title,product_type`)).product;
+      if (!cur.product_type) {
+        await shopify('put', `/products/${id}.json`, { product: { id: Number(id), product_type: tipos[id] } });
+        report.push({ id, titulo: cur.title, tipo_asignado: tipos[id] });
+      } else {
+        report.push({ id, titulo: cur.title, ya_tenia_tipo: cur.product_type });
+      }
+    } catch (e) { report.push({ id, error: e.response?.status || e.message }); }
+  }
+  // Descripción Poncho Aimara (id 14891022516600) si está vacía
+  try {
+    const id = 14891022516600;
+    const p = (await shopify('get', `/products/${id}.json?fields=id,title,body_html`)).product;
+    const limpio = (p.body_html || '').replace(/<[^>]*>/g, '').trim();
+    if (limpio.length < 30) {
+      const desc = `<p>El <strong>Poncho Aimara</strong> es una pieza tejida a mano en pequeños talleres de la región de Kutch, en India. Cada poncho nace de telas naturales seleccionadas una a una, con la calidez y la irregularidad bella de lo verdaderamente artesanal.</p>
+<p>Una prenda versátil y envolvente, pensada para acompañarte en las tardes frescas del paseo marítimo o como capa de carácter sobre cualquier look. Pieza única: no encontrarás dos iguales.</p>
+<ul>
+<li>Tejido artesanal en telar tradicional</li>
+<li>Materiales naturales, producción ética en talleres familiares</li>
+<li>Prenda atemporal, versátil y de carácter único</li>
+</ul>`;
+      await shopify('put', `/products/${id}.json`, { product: { id, body_html: desc } });
+      report.push({ id, titulo: p.title, descripcion: 'añadida (borrador editable)' });
+    } else {
+      report.push({ id, titulo: p.title, descripcion: 'ya tenía' });
+    }
+  } catch (e) { report.push({ id: 14891022516600, error: e.response?.status || e.message }); }
+  return report;
+}
+
+// T5: traducir el título de "Recently Viewed Products" en templates/product.json
+async function taskFixRecentlyViewed() {
+  const f = 'templates/product.json';
+  try {
+    const a = await shopify('get', `/themes/${THEME_ID}/assets.json?asset[key]=${encodeURIComponent(f)}`);
+    const json = JSON.parse(a.asset.value);
+    let cambios = 0;
+    const walk = obj => {
+      for (const k in obj) {
+        const v = obj[k];
+        if (typeof v === 'string' && (v === 'Recently Viewed Products' || v === 'Recently viewed products')) { obj[k] = 'Vistos recientemente'; cambios++; }
+        else if (v && typeof v === 'object') walk(v);
+      }
+    };
+    walk(json);
+    if (cambios) {
+      await shopify('put', `/themes/${THEME_ID}/assets.json`, { asset: { key: f, value: JSON.stringify(json) } });
+    }
+    return { textos_corregidos: cambios };
+  } catch (e) { return { error: e.response?.status || e.message }; }
+}
+
 async function runBootTasks() {
   const tasks = [
     ['merge_claves_es', taskMergeMissingLocaleKeys],
     ['textos_plantilla_producto', taskFixTemplateTexts],
-    ['enlaces_y_textos_home', taskFixHomeLinks]
+    ['enlaces_y_textos_home', taskFixHomeLinks],
+    ['fichas_incompletas', taskFixProductFichas],
+    ['recently_viewed', taskFixRecentlyViewed]
   ];
   for (const [nombre, fn] of tasks) {
     try { BOOT_LOG.push({ tarea: nombre, resultado: await fn() }); }
